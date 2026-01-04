@@ -17,7 +17,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Save
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.*
+import androidx.compose.ui.unit.sp
 import com.sealyze.presentation.viewmodel.CameraViewModel
 
 @Composable
@@ -34,15 +43,6 @@ fun CameraScreen(
             android.Manifest.permission.CAMERA
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
-    
-    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted -> 
-            // Often just forcing recomposition by changing state or just proceeding
-            // For this simple MV, we'll assume if granted, the composable recomposing/or re-entering might be enough,
-            // but usually we want a state variable.
-        }
-    )
     
     // Simple state to track if we should show camera
     val (permissionGranted, setPermissionGranted) = androidx.compose.runtime.remember { 
@@ -68,7 +68,7 @@ fun CameraScreen(
         androidx.compose.runtime.mutableIntStateOf(androidx.camera.core.CameraSelector.LENS_FACING_BACK) 
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (permissionGranted) {
             // key(...) ensures CameraPreview is fully recreated when lens changes
             androidx.compose.runtime.key(lensFacing) {
@@ -86,25 +86,63 @@ fun CameraScreen(
                 modifier = Modifier.fillMaxSize()
             )
             
-            // Camera Switch Button (Top Right)
-            androidx.compose.material3.IconButton(
-                onClick = { 
-                    lensFacing = if (lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_BACK) {
-                        androidx.camera.core.CameraSelector.LENS_FACING_FRONT
-                    } else {
-                        androidx.camera.core.CameraSelector.LENS_FACING_BACK
-                    }
-                },
+            // --- TOP BAR ---
+            androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), shape = androidx.compose.foundation.shape.CircleShape)
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)
+                        )
+                    )
+                    .padding(top = 48.dp, bottom = 24.dp, start = 24.dp, end = 24.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                androidx.compose.material3.Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Filled.Cameraswitch,
-                    contentDescription = "Cambiar Cámara",
-                    tint = Color.White
-                )
+                // App Title / Logo Area
+                androidx.compose.foundation.layout.Column {
+                    Text(
+                        text = "Se-alyze",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Traductor LSC en tiempo real",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+
+                // Glassy Switch Button
+                androidx.compose.material3.IconButton(
+                    onClick = { 
+                        lensFacing = if (lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_BACK) {
+                            androidx.camera.core.CameraSelector.LENS_FACING_FRONT
+                        } else {
+                            androidx.camera.core.CameraSelector.LENS_FACING_BACK
+                        }
+                    },
+                    modifier = Modifier
+                        .background(
+                            color = Color.White.copy(alpha = 0.2f), 
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .border(
+                            width = 1.dp, 
+                            color = Color.White.copy(alpha = 0.3f), 
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Filled.Cameraswitch,
+                        contentDescription = "Cambiar Cámara",
+                        tint = Color.White
+                    )
+                }
             }
 
         } else {
@@ -114,21 +152,64 @@ fun CameraScreen(
              }
         }
 
-        // Translation Result Box (Visible always to show initial state)
+        // --- BOTTOM SHEET (Glassmorphism) ---
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.7f))
-                .padding(32.dp)
+                .padding(16.dp)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.4f),
+                            Color.Black.copy(alpha = 0.8f)
+                        )
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+                )
+                .padding(24.dp)
         ) {
-            Text(
-                text = if (uiState.currentTranslation.isNotEmpty()) uiState.currentTranslation else "Esperando señas...",
-                style = MaterialTheme.typography.displayMedium,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+             androidx.compose.foundation.layout.Column(
+                 horizontalAlignment = Alignment.CenterHorizontally,
+                 modifier = Modifier.fillMaxWidth()
+             ) {
+                Text(
+                    text = "TRADUCCIÓN DETECTADA",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                    color = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Animated Text Transition
+                androidx.compose.animation.AnimatedContent(
+                    targetState = if (uiState.currentTranslation.isNotEmpty()) uiState.currentTranslation else "...",
+                    transitionSpec = {
+                        (androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn()).togetherWith(
+                            androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
+                        )
+                    },
+                    label = "TranslationText"
+                ) { targetText ->
+                    Text(
+                        text = targetText,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+                        ),
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                }
+             }
         }
     }
 }

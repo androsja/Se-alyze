@@ -13,6 +13,14 @@ El sistema está diseñado para ser **agnóstico del idioma y del modelo**.
 
 ## 2. Pipeline de Datos: De Cámara a Traducción
 
+> [!IMPORTANT]
+> **¿Es necesario entrenar una Red Neuronal? -> SI.**
+> No existe una "Librería Mágica de LSC" prefabricada.
+> 1.  **MediaPipe** solo ve **puntos y lineas** (Geometría). Sabe dónde está tu dedo meñique, pero no sabe qué significa eso.
+> 2.  **TFLite (Tu Cerebro)** es quien aprende que "Dedo índice arriba + Movimiento circular" = "SEÑA DE PREGUNTA".
+>
+> **Tu tarea crítica** es grabar videos de cada seña que quieras detectar para enseñarle a este cerebro.
+
 Este es el viaje exacto de la información a través de las capas.
 
 ### Paso 1: Captura (Data Layer - Hardware)
@@ -44,10 +52,22 @@ Aquí ocurre la "magia" matemática para hacer el sistema robusto.
 *   **Salida:** `float[] probabilities`. Un array con porcentajes para cada palabra posible.
     *   Ej: `[0.02, 0.95, 0.03]` (95% probabilidad de ser la palabra en índice 1).
 
-### Paso 5: Decodificación y UI (Presentation Layer)
+### Paso 5: Rectificador Semántico (Domain Layer - LLM) - [NUEVO]
+Aquí transformamos "Robots" en "Humanos".
+*   **Problema:** La traducción literal de señas produce "YO - IR - CINE - MAÑANA". Gramática "Tarzán".
+*   **Solución:** Un **LLM (Large Language Model)** actúa como "pulidor".
+*   **Entrada:** Lista de palabras: `["Yo", "Querer", "Agua"]`.
+*   **Proceso:** Se envía un prompt al LLM: *"Convierte esta secuencia de palabras de lengua de señas en una frase coherente y natural en español: 'Yo Querer Agua'"*.
+*   **Salida:** "Quiero agua, por favor".
+*   **Implementación:**
+    *   *Opción A (On-Device):* **Gemini Nano** (Android AICore). Privado, rápido, offline. (Requiere dispositivos Pixel 8/S24+).
+    *   *Opción B (Cloud):* **Gemini Flash API**. Requiere internet, pero funciona en cualquier Android.
+    *   *Opción C (Local Small Model):* Modelos cuantizados pequeños (Gemma 2b) corriendo via MediaPipe LLM Inference.
+
+### Paso 6: Decodificación y UI (Presentation Layer)
 *   **Umbral:** Si la probabilidad > 85%, se considera válida.
 *   **Anti-Rebote (Debounce):** Si el modelo dice "Hola" 5 veces seguidas en 0.2 segundos, solo mostramos una vez "Hola".
-*   **Estado UI:** Se actualiza `TranslationUiState` con la nueva palabra.
+*   **Estado UI:** Se actualiza `TranslationUiState` con la nueva palabra y la frase coherente generada.
 
 ---
 

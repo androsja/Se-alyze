@@ -64,6 +64,7 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.50")
     kapt("com.google.dagger:hilt-android-compiler:2.50")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     implementation("androidx.compose.material:material-icons-extended:1.5.0")
 
     // CameraX
@@ -74,9 +75,16 @@ dependencies {
     implementation("androidx.camera:camera-view:${cameraxVersion}")
 
     // MediaPipe & TFLite
-    implementation("com.google.mediapipe:tasks-vision:0.10.9")
-    implementation("org.tensorflow:tensorflow-lite:2.14.0")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+    implementation("com.google.mediapipe:tasks-vision:0.10.14") {
+        exclude(group = "org.tensorflow", module = "tensorflow-lite")
+        exclude(group = "org.tensorflow", module = "tensorflow-lite-gpu")
+        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
+    }
+    
+    // LiteRT (Next Gen TFLite) - Version 0.1.0 verified on Maven Central
+    implementation("io.github.google-ai-edge:litert:0.1.0")
+    implementation("io.github.google-ai-edge:litert-select-tf-ops:0.1.0")
+    // implementation("io.github.google-ai-edge:litert-gpu:0.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
@@ -86,4 +94,10 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+configurations.all {
+    resolutionStrategy {
+        // Force removed as we are using LiteRT
+    }
 }

@@ -9,9 +9,12 @@ Este documento detalla el plan de desarrollo paso a paso para construir el proto
 - [ ] Decidir el lenguaje objetivo (LSE, LSM, ASL, etc.).
 - [ ] Definir el vocabulario inicial (MVP): Empezar con 10-20 señas básicas (ej. "Hola", "Gracias", "Ayuda", "Casa").
 
-### 1.2 Adquisición de Datos
+### 1.2 Adquisición de Datos (CRÍTICO)
 - [ ] **Investigación:** Buscar datasets existentes (WLASL, LSE_Lex, AUTSL).
-- [ ] **Recolección Propia (Si es necesario):** Grabar videos propios para completar el vocabulario.
+- [ ] **Grabación de Dataset LSC (Tu Tarea Principal):**
+    - [ ] Definir lista de 20 palabras.
+    - [ ] Grabar 30-50 videos POR PALABRA (diferentes distancias, luces, personas).
+    - [ ] Organizar en carpetas: `dataset/hola/`, `dataset/gracias/`.
 - [ ] **Limpieza:** Filtrar videos de baja calidad o encuadres incorrectos.
 
 ## Fase 2: Motor de Inteligencia Artificial (Semanas 3-5)
@@ -48,9 +51,15 @@ Este documento detalla el plan de desarrollo paso a paso para construir el proto
 - [ ] Crear un buffer (ventana deslizante) que acumule los últimos 30 frames de coordenadas.
 - [ ] Pasar el buffer al modelo y obtener la predicción.
 
-### 3.4 Interfaz y Salida (UI/UX)
+### 3.4 El "Pulidor" Semántico (LLM Integration)
+- [ ] **Selección de Motor:** Decidir entre Gemini Nano (On-device, requiere Pixel/S24) o Gemini Flash API (Cloud, universal).
+- [ ] **Prompt Engineering:** Diseñar el prompt para el "System Role": *"Eres un experto traductor de LSC. Tu tarea es recibir palabras sueltas y devolver una frase coherente..."*.
+- [ ] **Implementación:** Crear `LlmRepository` para manejar la cola de palabras y llamar al modelo.
+
+### 3.5 Interfaz y Salida (UI/UX)
 - [ ] Mostrar la palabra predicha en pantalla con alta legibilidad.
-- [ ] Implementar **Text-to-Speech (TTS)** nativo de Android para vocalizar la palabra.
+- [ ] **Mostrar Frase Coherente:** "Traducción: [Frase generada por LLM]".
+- [ ] Implementar **Text-to-Speech (TTS)** nativo de Android.
 - [ ] Añadir botón de "Borrar" o "Frase Nueva".
 
 ## Fase 4: Pruebas y Refinamiento (Semanas 10+)

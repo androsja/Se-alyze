@@ -1,0 +1,33 @@
+# System
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Android / Gradle (If not handled by inner gitignore)
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+
+# Project Specific - Data & Logs
+dataset/
+logs/
+training_output.log
+
+# Large Model Files (Keep .tflite in assets if needed, but ignore large training checkpoints)
+*.h5
+*.keras
+checkpoints/
+*.hprof
+
+# Temporary Scripts (if any)
+python_scripts/Se-alyze-Android/

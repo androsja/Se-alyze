@@ -58,6 +58,15 @@ class MediaPipeDataSource @Inject constructor(
 
     private fun returnLivestreamResult(result: HandLandmarkerResult, input: MPImage) {
         val frame = convertToDomain(result)
+        
+        // LOGGING: Check if hands are actually detected
+        if (frame.leftHand != null || frame.rightHand != null) {
+            android.util.Log.d("SealyzeDebug", "MediaPipe: Hands detected! L=${frame.leftHand != null} R=${frame.rightHand != null}")
+        } else {
+            // Uncomment to see empty frames (can be spammy)
+            // android.util.Log.v("SealyzeDebug", "MediaPipe: No hands detected")
+        }
+
         // Emit to flow. 
         // Note: This callback comes from MediaPipe thread. We use tryEmit to be safe/fast.
         _landmarkFlow.tryEmit(frame)
@@ -77,11 +86,37 @@ class MediaPipeDataSource @Inject constructor(
     }
 
     private fun convertToDomain(result: HandLandmarkerResult): SignFrame {
-        val leftHand = result.landmarks().getOrNull(0)?.map { 
-            Landmark(it.x(), it.y(), it.z(), it.visibility().orElse(0f))
-        }
-        val rightHand = result.landmarks().getOrNull(1)?.map {
-            Landmark(it.x(), it.y(), it.z(), it.visibility().orElse(0f))
+        var leftHand: List<Landmark>? = null
+        var rightHand: List<Landmark>? = null
+
+        // MediaPipe returns a list of hands. We need to check 'handedness' to know which is which.
+        // handedness() returns a list of Categories for each detected hand.
+        
+        for (i in result.landmarks().indices) {
+            val handLandmarks = result.landmarks()[i]
+            val handCategory = result.handedness()[i].firstOrNull() ?: continue
+            
+            // MediaPipe in 'Selfie' mode sometimes inverts Left/Right labels depending on configuration.
+            // But usually 'Right' means the user's right hand. 
+            // We map the landmarks and FLIP X (1-x) to match the 'Mirror Mode' training data.
+            
+            val mappedLandmarks = handLandmarks.map {
+                Landmark(
+                    x = it.x(), // Removed manual flip. Trusting raw MP output.
+                    y = it.y(),
+                    z = it.z(),
+                    visibility = it.visibility().orElse(0f)
+                )
+            }
+
+            // CRITICAL FIX: "Selfie Mode" Handedness Swap
+            // MediaPipe in Selfie mode often sees User's Right Hand as "Left" (Screen Left).
+            // We swap them here so the Model receives "Right Hand" data when User raises Right Hand.
+            if (handCategory.categoryName() == "Left") {
+                rightHand = mappedLandmarks // Was leftHand
+            } else {
+                leftHand = mappedLandmarks // Was rightHand
+            }
         }
         
         return SignFrame(

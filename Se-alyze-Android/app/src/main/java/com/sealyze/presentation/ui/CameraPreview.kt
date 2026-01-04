@@ -3,6 +3,7 @@ package com.sealyze.presentation.ui
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.AspectRatio
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -42,7 +43,9 @@ fun CameraPreview(
                     }
 
                     val imageAnalyzer = ImageAnalysis.Builder()
+                        .setTargetAspectRatio(AspectRatio.RATIO_16_9)
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .build()
                         .also {
                             it.setAnalyzer(cameraExecutor, onImageAnalyzed)

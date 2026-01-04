@@ -46,16 +46,33 @@ class CameraViewModel @Inject constructor(
                 .collect { result ->
                     val previousWord = _uiState.value.currentTranslation
                     
+                    android.util.Log.d("SealyzeDebug", "ViewModel: Received prediction: ${result.word} (${result.confidence})")
+                    
+                    // Clear translation text when detecting neutral state (_none)
+                    val displayWord = if (result.word.startsWith("_")) "" else result.word
+                    
                     _uiState.update { 
                         it.copy(
-                            currentTranslation = result.word,
-                            confidence = result.confidence
+                            currentTranslation = displayWord,
+                            confidence = result.confidence,
+                            debugInfo = "Conf: ${"%.2f".format(result.confidence)}"
                         ) 
                     }
                     
-                    // TTS Logic: Speak if confidence is high and word changed
-                    if (result.confidence > 0.85f && result.word != previousWord && result.word.isNotEmpty()) {
-                        ttsManager.speak(result.word)
+                    // TTS Logic: Speak if confidence is high and word changed (ignore technical classes starting with _)
+                    // Compare with displayWord (what's shown) not previousWord to properly detect state changes
+                    val confidenceCheck = result.confidence > 0.60f
+                    val wordChangedCheck = displayWord != previousWord
+                    val notEmptyCheck = displayWord.isNotEmpty()
+                    val notTechnicalCheck = !result.word.startsWith("_")
+                    
+                    android.util.Log.d("SealyzeDebug", "TTS Checks: conf=${result.confidence} (>${0.60f}=$confidenceCheck), wordChanged=($previousWord != $displayWord)=$wordChangedCheck, notEmpty=$notEmptyCheck, notTechnical=$notTechnicalCheck")
+                    
+                    if (confidenceCheck && wordChangedCheck && notEmptyCheck && notTechnicalCheck) {
+                        android.util.Log.d("SealyzeDebug", "✅ TTS: Speaking '$displayWord'")
+                        ttsManager.speak(displayWord)
+                    } else {
+                        android.util.Log.d("SealyzeDebug", "❌ TTS: NOT speaking '$displayWord' - Failed checks")
                     }
                 }
         }
