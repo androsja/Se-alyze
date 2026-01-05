@@ -8,9 +8,11 @@ import tensorflow as tf
 
 # ==========================================
 # CONFIGURACIÓN
-# ==========================================
-DATA_PATH = os.path.join('.', 'dataset') 
-SEQUENCE_LENGTH = 20 # Revertido a 20 para mayor velocidad
+# ==========================================# Configuración
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dataset') 
+SEQUENCE_LENGTH = 35 # Ajustado a 35 frames
+EPOCHS = 120         
+BATCH_SIZE = 32
 
 def train_local():
     # 1. Cargar Datos
@@ -23,18 +25,15 @@ def train_local():
     
     for action in actions:
         action_path = os.path.join(DATA_PATH, action)
-        # Asumiendo que hay 30 secuencias...
         # Listamos carpetas que sean números
         video_dirs = [d for d in os.listdir(action_path) if d.isdigit()]
         
-        # Cargar TODAS las secuencias disponibles (sin límite fijo)
+        # Cargar TODAS las secuencias disponibles
         for sequence in video_dirs:
-            window = []
-            # Cargamos los 30 frames
             try:
-                for frame_num in range(SEQUENCE_LENGTH):
-                    res = np.load(os.path.join(action_path, str(sequence), "{}.npy".format(frame_num)))
-                    window.append(res)
+                # El archivo ya contiene la secuencia completa con padding
+                keypoints_file = os.path.join(action_path, str(sequence), "keypoints.npy")
+                window = np.load(keypoints_file)  # Shape: (35, 126)
                 sequences.append(window)
                 labels.append(label_map[action])
             except Exception as e:

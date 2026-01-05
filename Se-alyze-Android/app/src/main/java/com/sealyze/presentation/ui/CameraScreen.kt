@@ -160,7 +160,19 @@ fun CameraScreen(
                     .align(Alignment.TopCenter)
                     // ... (modifiers omitted)
             ) {
-                // ... (Title Area omitted) ...
+                // TITLE "Señalyze"
+                Text(
+                    text = "Señalyze",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = Color.Cyan,
+                    modifier = Modifier
+                        .padding(top = 48.dp) // Push down from status bar
+                        .weight(1f) // Push camera button to right
+                        .padding(start = 24.dp)
+                )
 
                 // Glassy Switch Button
                 androidx.compose.material3.IconButton(
@@ -204,15 +216,15 @@ fun CameraScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(16.dp)
+                // .padding(16.dp) <-- REMOVED to be full width
                 .background(
                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(
                             Color.Black.copy(alpha = 0.3f),
-                            Color.Black.copy(alpha = 0.85f)
+                            Color.Black.copy(alpha = 0.95f) // Darker at bottom
                         )
                     ),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp) // Only top corners
                 )
                 .border(
                     width = 1.dp,
@@ -222,9 +234,9 @@ fun CameraScreen(
                             Color.Transparent
                         )
                     ),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                 )
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = 24.dp, vertical = 20.dp) // Internal padding
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -233,7 +245,7 @@ fun CameraScreen(
             ) {
                 // LEFT: Main Content (Buffer + Result)
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
                     verticalArrangement = Arrangement.Center
                 ) {
                     // 1. Buffer Display (or timer hint)
@@ -244,8 +256,8 @@ fun CameraScreen(
                                 text = uiState.smartSentenceBuffer.joinToString(" • "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Yellow.copy(alpha = 0.9f),
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                // maxLines = 1, <--- REMOVED to allow expansion
+                                // overflow = ..., <--- REMOVED
                                 modifier = Modifier.weight(1f, fill = false)
                             )
                             
@@ -320,25 +332,34 @@ fun CameraScreen(
                 }
 
                 // RIGHT: Actions (Clear / Status Icon)
-                // If hands are detected, show the "Scanning Waves"
-                // If text exists, show Clear button
+                // Layout: [Waves?] [Timer] [Trash]
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     
-                    // --- TIMER SELECTOR ---
+                     // Scanning Animation (Visible when hands are present)
+                    val handsVisible = uiState.landmarks?.let { it.leftHand != null || it.rightHand != null } ?: false
+                    
+                    if (handsVisible) {
+                        ScanningWaves(modifier = Modifier.padding(end = 12.dp))
+                    }
+
+                    // --- TIMER SELECTOR (Small) ---
                     var showTimerMenu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
                     Box(modifier = Modifier.padding(end = 8.dp)) {
                         androidx.compose.material3.IconButton(
                             onClick = { showTimerMenu = true },
                             modifier = Modifier
+                                .height(36.dp) // COMPACT SIZE
+                                .width(36.dp)
                                 .background(Color.White.copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)
                                 .border(1.dp, Color.White.copy(alpha = 0.1f), androidx.compose.foundation.shape.CircleShape)
                         ) {
                              Icon(
                                 imageVector = androidx.compose.material.icons.Icons.Filled.Timer, 
                                 contentDescription = "Tiempo",
-                                tint = Color.White.copy(alpha = 0.9f)
+                                tint = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.height(20.dp).width(20.dp) // Smaller Icon
                             )
                         }
                         
@@ -358,17 +379,13 @@ fun CameraScreen(
                         }
                     }
 
-                    // Scanning Animation (Visible when hands are present)
-                    val handsVisible = uiState.landmarks?.let { it.leftHand != null || it.rightHand != null } ?: false
-                    
-                    if (handsVisible) {
-                        ScanningWaves(modifier = Modifier.padding(end = 12.dp))
-                    }
-
+                    // --- CLEAR BUTTON (Small) ---
                     if (uiState.smartSentenceBuffer.isNotEmpty() || uiState.smartSentence.isNotEmpty()) {
                         androidx.compose.material3.IconButton(
                             onClick = { viewModel.onClearSentence() },
                             modifier = Modifier
+                                .height(36.dp) // COMPACT SIZE
+                                .width(36.dp)
                                 .background(
                                     color = Color.White.copy(alpha = 0.15f), 
                                     shape = androidx.compose.foundation.shape.CircleShape
@@ -378,7 +395,8 @@ fun CameraScreen(
                             Icon(
                                 imageVector = androidx.compose.material.icons.Icons.Filled.DeleteSweep,
                                 contentDescription = "Borrar",
-                                tint = Color.White.copy(alpha = 0.9f)
+                                tint = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.height(20.dp).width(20.dp) // Smaller Icon
                             )
                         }
                     } else if (!handsVisible) {
@@ -387,7 +405,7 @@ fun CameraScreen(
                             imageVector = androidx.compose.material.icons.Icons.Filled.FiberManualRecord,
                             contentDescription = "Idle",
                             tint = Color.Gray.copy(alpha = 0.3f),
-                            modifier = Modifier.padding(8.dp)
+                            modifier = Modifier.padding(8.dp).height(12.dp).width(12.dp)
                         )
                     }
                 }

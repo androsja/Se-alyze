@@ -17,7 +17,7 @@ class TfliteDataSource @Inject constructor(
 
     private var interpreter: Interpreter? = null
     private val sequenceBuffer = ArrayDeque<SignFrame>()
-    private val SEQUENCE_LENGTH = 20 // Reverted to 20 for snappier feel
+    private val SEQUENCE_LENGTH = 35 // Adjusted to 35 frames (approx 1.17s)
     private val FEATURE_SIZE = 126 // 21*3 (LH) + 21*3 (RH) - Simplified for Android
     private var labels: List<String> = emptyList()
 

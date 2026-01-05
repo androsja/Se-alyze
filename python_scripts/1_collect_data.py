@@ -28,10 +28,10 @@ except FileNotFoundError:
     SIGN_LIST = [("hola", DEFAULT_SEQUENCES), ("agua", DEFAULT_SEQUENCES), ("_none", DEFAULT_SEQUENCES)]
 
 print(f"📋 Lista de trabajo cargada: {SIGN_LIST}") 
-
-DATA_PATH = os.path.join('dataset') 
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dataset') # Ruta absoluta: Se-alyze/dataset
 NO_SEQUENCES = 30   # Videos por seña
-SEQUENCE_LENGTH = 20 # Frames por video (Revertido a 20 para mayor velocidad)
+SEQUENCE_LENGTH = 35  # AJUSTADO: 35 frames (aprox 1.17 seg) - Balance perfecto
+MIN_LENGTH = 15      # Mínimo de frames para que sea válidaara mayor velocidad)
 
 # ==========================================
 # MEDIAPIPE SETUP
@@ -177,6 +177,8 @@ def record_sign():
             for sequence in range(existing_sequences, target_sequences):
                 # 3. Lógica de Espera UI
                 # CONTEO REGRESIVO (1) - MÁS RÁPIDO
+                collected_keypoints = [] # Initialize list for this sequence
+                
                 for countdown in range(1, 0, -1):
                     start_time = time.time()
                     while time.time() - start_time < 1.0:
@@ -209,6 +211,8 @@ def record_sign():
                             cap.release()
                             cv2.destroyAllWindows()
                             return
+                            
+                print(f"🎬 Grabando secuencia {sequence + 1}/{target_sequences} para '{sign_name}'...")
 
                 # GRABANDO FRAMES REALES
                 for frame_num in range(SEQUENCE_LENGTH):
@@ -240,21 +244,46 @@ def record_sign():
                     
                     # 4. Exportar Keypoints
                     keypoints = extract_keypoints(results)
+                    collected_keypoints.append(keypoints) # Collect keypoints for the sequence
                     
-                    # Crear carpetas si no existen (redundancia segura)
-                    seq_path = os.path.join(sign_folder, str(sequence))
-                    if not os.path.exists(seq_path): os.makedirs(seq_path)
-                    
-                    npy_full_path = os.path.join(seq_path, str(frame_num))
-                    np.save(npy_full_path, keypoints)
-
                     if cv2.waitKey(1) & 0xFF == 27: # ESC (ASCII 27)
                          print("Interrupción detectada (ESC). Borrando secuencia corrupta...")
-                         shutil.rmtree(seq_path, ignore_errors=True)
+                         # No need to remove folder here, as it's handled after the loop
                          if out_video: out_video.release()
                          cap.release()
                          cv2.destroyAllWindows()
                          return
+                
+                # After collecting all frames for a sequence
+                # After collecting all frames for a sequence
+                seq_path = os.path.join(sign_folder, str(sequence))
+                
+                # GUARDAR SECUENCIA (Rellenar con ceros si es corta)
+                if len(collected_keypoints) >= MIN_LENGTH: # Use collected_keypoints length
+                     res_array = np.array(collected_keypoints) # Shape: (frames_reales, 126)
+                     
+                     # PADDING: Rellenar hasta llegar a 60
+                     if len(collected_keypoints) < SEQUENCE_LENGTH:
+                         padding_needed = SEQUENCE_LENGTH - len(collected_keypoints)
+                         # Rellenamos con ceros al final
+                         # Shape del padding: (padding_needed, 126)
+                         padding = np.zeros((padding_needed, res_array.shape[1])) # Use actual keypoint dimension
+                         res_array = np.vstack((res_array, padding))
+                     
+                     # Recortar si se pasó (por seguridad, aunque el break lo evita)
+                     res_array = res_array[:SEQUENCE_LENGTH]
+                     
+                     # Create folder if it doesn't exist
+                     if not os.path.exists(seq_path): os.makedirs(seq_path)
+                     
+                     npy_full_path = os.path.join(seq_path, "keypoints.npy") # Save as a single file for the sequence
+                     np.save(npy_full_path, res_array)
+                     print(f"🎬 Grabando secuencia {sequence + 1}/{target_sequences} para '{sign_name}'...")
+                else:
+                    print(f"⚠️ Seña muy corta ({len(collected_keypoints)} frames). Ignorada para '{sign_name}' secuencia {sequence + 1}.")
+                    # If the sequence is too short and ignored, remove its folder if it was created
+                    if os.path.exists(seq_path):
+                        shutil.rmtree(seq_path, ignore_errors=True)
     
     if out_video: 
          out_video.release()

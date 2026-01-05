@@ -1,0 +1,3 @@
+diff --git a/Se-alyze-Android/changes.patch b/Se-alyze-Android/changes.patch
+new file mode 100644
+index 0000000..e69de29
