@@ -3,6 +3,7 @@ package com.sealyze.data.source
 import android.content.Context
 import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.ByteBufferImageBuilder
 import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -25,8 +26,12 @@ class MediaPipeDataSource @Inject constructor(
 ) {
 
     private var handLandmarker: HandLandmarker? = null
-    // SharedFlow to emit results to subscribers (ViewModel/Repo)
-    private val _landmarkFlow = MutableSharedFlow<SignFrame>(extraBufferCapacity = 1)
+    // SharedFlow with larger buffer to prevent dropping frames on slow collectors
+    private val _landmarkFlow = MutableSharedFlow<SignFrame>(
+        replay = 0,
+        extraBufferCapacity = 64, // Increased from 1 to 64 to handle backpressure
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
     val landmarkFlow: Flow<SignFrame> = _landmarkFlow.asSharedFlow()
 
     init {
@@ -61,15 +66,15 @@ class MediaPipeDataSource @Inject constructor(
         
         // LOGGING: Check if hands are actually detected
         if (frame.leftHand != null || frame.rightHand != null) {
-            android.util.Log.d("SealyzeDebug", "MediaPipe: Hands detected! L=${frame.leftHand != null} R=${frame.rightHand != null}")
-        } else {
-            // Uncomment to see empty frames (can be spammy)
-            // android.util.Log.v("SealyzeDebug", "MediaPipe: No hands detected")
+            // android.util.Log.d("SealyzeDebug", "MediaPipe: Hands detected! L=${frame.leftHand != null} R=${frame.rightHand != null}")
         }
 
-        // Emit to flow. 
-        // Note: This callback comes from MediaPipe thread. We use tryEmit to be safe/fast.
-        _landmarkFlow.tryEmit(frame)
+        // Emit to flow safely. 
+        // tryEmit returns false if buffer is full. With capacity 64, this should be rare.
+        val emitted = _landmarkFlow.tryEmit(frame)
+        if (!emitted) {
+            android.util.Log.w("SealyzeDebug", "MediaPipe: DROPPED FRAME due to buffer overflow!")
+        }
     }
 
     private fun returnLivestreamError(error: RuntimeException) {
@@ -77,9 +82,14 @@ class MediaPipeDataSource @Inject constructor(
     }
 
     fun processVideoFrame(imageProxy: ImageProxy) {
+        // Reverting optimization: Direct ByteBuffer usage caused crashes due to row stride/padding issues.
+        // Using toBitmap() is safer until we can properly handle planes with stride.
         val mpImage = BitmapImageBuilder(imageProxy.toBitmap()).build()
-        // Use current timestamp
-        handLandmarker?.detectAsync(mpImage, System.currentTimeMillis())
+
+        // Use frame timestamp (converted to ms) for correct tracking instad of system time
+        val timestampMs = imageProxy.imageInfo.timestamp / 1000000
+        
+        handLandmarker?.detectAsync(mpImage, timestampMs)
         
         // IMPORTANT: Must close!
         imageProxy.close()
@@ -123,7 +133,7 @@ class MediaPipeDataSource @Inject constructor(
             leftHand = leftHand,
             rightHand = rightHand,
             pose = null,
-            timestamp = System.currentTimeMillis()
+            timestamp = result.timestampMs()
         )
     }
 }

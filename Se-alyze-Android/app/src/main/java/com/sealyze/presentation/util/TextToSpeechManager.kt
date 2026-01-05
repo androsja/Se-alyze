@@ -26,6 +26,11 @@ class TextToSpeechManager @Inject constructor(
                 // Fallback to generic Spanish
                 tts?.setLanguage(Locale("es", "ES"))
             }
+            
+            // Tune voice for less robotic sound (User Request)
+            tts?.setPitch(0.9f)       // Slightly deeper
+            tts?.setSpeechRate(0.85f) // More deliberate/calm
+
             isInitialized = true
         }
     }

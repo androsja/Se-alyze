@@ -10,7 +10,7 @@ import tensorflow as tf
 # CONFIGURACIÓN
 # ==========================================
 DATA_PATH = os.path.join('.', 'dataset') 
-SEQUENCE_LENGTH = 20
+SEQUENCE_LENGTH = 20 # Revertido a 20 para mayor velocidad
 
 def train_local():
     # 1. Cargar Datos

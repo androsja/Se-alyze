@@ -33,7 +33,13 @@ class SignRepositoryImpl @Inject constructor(
             }
 
             if (stabilityCount >= STABILITY_THRESHOLD) {
-                emit(result)
+                // Clean up the word for UI (e.g., "por_favor" -> "por favor"), but keep technical labels (e.g. "_none") intact
+                val cleanWord = if (result.word.startsWith("_")) {
+                    result.word
+                } else {
+                    result.word.replace("_", " ")
+                }
+                emit(result.copy(word = cleanWord))
             } else {
                 android.util.Log.d("SealyzeDebug", "Repository: Filtering transient '${result.word}' ($stabilityCount/$STABILITY_THRESHOLD)")
             }

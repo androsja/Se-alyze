@@ -5,6 +5,8 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.sealyze"
     compileSdk = 36
@@ -15,6 +17,18 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        
+        val localProperties = Properties()
+        val localFile = rootProject.file("local.properties")
+        if (localFile.exists()) {
+            localFile.inputStream().use { localProperties.load(it) }
+        }
+        buildConfigField("String", "GEMINI_API_KEY", "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\"")
+        buildConfigField("String", "DEEPSEEK_API_KEY", "\"${localProperties.getProperty("DEEPSEEK_API_KEY", "")}\"")
+        
+        // Read from gradle.properties
+        val showDebugOverlay = project.findProperty("showDebugOverlay") ?: "false"
+        buildConfigField("boolean", "SHOW_DEBUG_OVERLAY", showDebugOverlay.toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -37,6 +51,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
@@ -94,6 +109,11 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // Google AI (Gemini)
+    // Google AI (Gemini) - Removed in favor of direct REST API integration
+    // implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 }
 
 configurations.all {

@@ -1,3 +1,4 @@
+import shutil
 import cv2
 import os
 import time
@@ -7,13 +8,30 @@ import mediapipe as mp
 # ==========================================
 # CONFIGURACIÓN
 # ==========================================
-# LISTA DE PALABRAS A GRABAR (El script irá una por una)
-# Nota: 'ayuda_me' es la versión de 'ecesito ayuda' (hacia el cuerpo)
-SIGN_LIST = ["hola", "_none", "agua"] 
+# Configuración de muestras por seña
+DEFAULT_SEQUENCES = 30
+SIGN_LIST = [] 
+
+try:
+    with open(os.path.join(os.path.dirname(__file__), 'target_words.txt'), 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'): continue
+            
+            parts = line.split(',')
+            name = parts[0].strip()
+            count = int(parts[1].strip()) if len(parts) > 1 else DEFAULT_SEQUENCES
+            SIGN_LIST.append((name, count))
+            
+except FileNotFoundError:
+    print("⚠️ ADVERTENCIA: No se encontró 'target_words.txt'. Usando lista por defecto.")
+    SIGN_LIST = [("hola", DEFAULT_SEQUENCES), ("agua", DEFAULT_SEQUENCES), ("_none", DEFAULT_SEQUENCES)]
+
+print(f"📋 Lista de trabajo cargada: {SIGN_LIST}") 
 
 DATA_PATH = os.path.join('dataset') 
 NO_SEQUENCES = 30   # Videos por seña
-SEQUENCE_LENGTH = 20 # Frames por video
+SEQUENCE_LENGTH = 20 # Frames por video (Revertido a 20 para mayor velocidad)
 
 # ==========================================
 # MEDIAPIPE SETUP
@@ -30,6 +48,16 @@ def mediapipe_detection(image, model):
     return image, results
 
 def draw_styled_landmarks(image, results):
+    # Cara (Mesh Contours) - Para que el usuario vea el mentón
+    if results.face_landmarks:
+        mp_drawing.draw_landmarks(
+            image, 
+            results.face_landmarks, 
+            mp_holistic.FACEMESH_CONTOURS,
+            mp_drawing.DrawingSpec(color=(80,110,10), thickness=1, circle_radius=1),
+            mp_drawing.DrawingSpec(color=(80,256,121), thickness=1, circle_radius=1)
+        )
+
     # Manos
     mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
     mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
@@ -37,6 +65,8 @@ def draw_styled_landmarks(image, results):
     mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
 
 def extract_keypoints(results):
+    # POSE contiene 33 puntos, incluyendo nariz (0), ojos y boca (9,10). 
+    # Usamos esto como referencia del "mentón".
     pose = np.array([[res.x, res.y, res.z, res.visibility] for res in results.pose_landmarks.landmark]).flatten() if results.pose_landmarks else np.zeros(33*4)
     lh = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(21*3)
     rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21*3)
@@ -67,21 +97,22 @@ def record_sign():
     with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
         
         # --- BUCLE PRINCIPAL PARA CADA PALABRA ---
-        for sign_name in SIGN_LIST:
+        for sign_name, target_sequences in SIGN_LIST:
             
             # Verificar si ya existe y contar secuencias existentes
             sign_folder = os.path.join(DATA_PATH, sign_name)
+            # target_sequences viene de la tupla (parsed from txt)
             existing_sequences = 0
             
             if os.path.exists(sign_folder):
                 existing_sequences = len([d for d in os.listdir(sign_folder) 
                                          if os.path.isdir(os.path.join(sign_folder, d))])
                 
-                if existing_sequences >= NO_SEQUENCES:
-                    print(f"✅ Skipping '{sign_name}', ya tiene {existing_sequences}/{NO_SEQUENCES} secuencias.")
+                if existing_sequences >= target_sequences:
+                    print(f"✅ Skipping '{sign_name}', ya tiene {existing_sequences}/{target_sequences} secuencias.")
                     continue
                 else:
-                    print(f"📁 '{sign_name}' tiene {existing_sequences}/{NO_SEQUENCES} secuencias. Grabando {NO_SEQUENCES - existing_sequences} más...")
+                    print(f"📁 '{sign_name}' tiene {existing_sequences}/{target_sequences} secuencias. Grabando {target_sequences - existing_sequences} más...")
             else:
                 os.makedirs(sign_folder)
                 print(f"📁 Creando carpeta para '{sign_name}'")
@@ -89,21 +120,30 @@ def record_sign():
             # --- PANTALLA DE ESPERA (Interacción Usuario) ---
             print(f"--> Preparando: '{sign_name.upper()}'")
             user_ready = False
+            record_video_mode = False # Estado del toggle
+            
             while not user_ready:
                 ret, frame = cap.read()
                 if not ret: break
                 frame = cv2.flip(frame, 1) # Espejo
 
                 # Overlay de instrucciones
+                display_name = sign_name.replace("_", " ").upper()
                 cv2.rectangle(frame, (0,0), (frame.shape[1], 80), (0,0,0), -1) # Barra negra superior
-                cv2.putText(frame, f"SIGUIENTE PALABRA: {sign_name.upper()}", (50, 60), 
+                cv2.putText(frame, f"SIGUIENTE PALABRA: {display_name}", (50, 60), 
                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3, cv2.LINE_AA)
                 
                 # Mostrar progreso
-                progress_text = f"Progreso: {existing_sequences}/{NO_SEQUENCES} - Grabar {NO_SEQUENCES - existing_sequences} mas"
-                cv2.putText(frame, progress_text, (50, frame.shape[0]-140), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+                progress_text = f"Progreso: {existing_sequences}/{target_sequences} - Grabar {target_sequences - existing_sequences} mas"
+                cv2.putText(frame, progress_text, (50, frame.shape[0]-180), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2, cv2.LINE_AA)
                 
+                # Instrucción Video
+                video_status = "ACTIVADO" if record_video_mode else "DESACTIVADO"
+                video_color = (0, 255, 0) if record_video_mode else (0, 0, 255)
+                cv2.putText(frame, f"Grabar Video (Presiona V): [{video_status}]", (50, frame.shape[0]-140), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, video_color, 2, cv2.LINE_AA)
+
                 cv2.putText(frame, "Presiona [ESPACIO] para Grabar", (50, frame.shape[0]-100), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3, cv2.LINE_AA)
                 cv2.putText(frame, "Presiona [ESC] para Salir", (50, frame.shape[0]-50), 
@@ -114,18 +154,30 @@ def record_sign():
                 key = cv2.waitKey(10)
                 if key == 32: # Espacio (ASCII 32)
                     user_ready = True
+                elif key == 118 or key == 86: # 'v' o 'V'
+                    record_video_mode = not record_video_mode
                 elif key == 27: # ESC (ASCII 27)
                     print("Saliendo...")
                     cap.release()
                     cv2.destroyAllWindows()
                     return
 
+            # --- INICIALIZAR GRABADOR DE VIDEO (Si se activó) ---
+            out_video = None
+            if record_video_mode:
+                video_filename = os.path.join(sign_folder, f"{sign_name}_raw_video.mov")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Codec .mov
+                fps = 30.0 # Aproximado, la webcam puede variar
+                resolution = (1280, 720) # Debe coincidir con cap.set
+                out_video = cv2.VideoWriter(video_filename, fourcc, fps, resolution)
+                print(f"🎥 Grabando video en: {video_filename}")
+
             # --- INICIA GRABACIÓN DE LA PALABRA ---
             # Solo grabar las secuencias que faltan, empezando desde existing_sequences
-            for sequence in range(existing_sequences, NO_SEQUENCES):
+            for sequence in range(existing_sequences, target_sequences):
                 # 3. Lógica de Espera UI
-                # CONTEO REGRESIVO (3, 2, 1) - OPTIMIZADO
-                for countdown in range(2, 0, -1):
+                # CONTEO REGRESIVO (1) - MÁS RÁPIDO
+                for countdown in range(1, 0, -1):
                     start_time = time.time()
                     while time.time() - start_time < 1.0:
                         ret_count, frame_count = cap.read()
@@ -143,14 +195,20 @@ def record_sign():
                         
                         cv2.putText(frame_count, text, (text_x, text_y), 
                                    font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
-                        cv2.putText(frame_count, f"GRABANDO: {sign_name.upper()}", (50, 100), 
+                        cv2.putText(frame_count, f"GRABANDO: {sign_name.replace('_', ' ').upper()}", (50, 100), 
                                    cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 3)
                                    
-                        cv2.putText(frame_count, f'Video {sequence + 1}/{NO_SEQUENCES}', (15,50), 
+                        cv2.putText(frame_count, f'Video {sequence + 1}/{target_sequences}', (15,50), 
                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                         
+
                         cv2.imshow('Recolector LSC', frame_count)
-                        cv2.waitKey(10)
+                        if cv2.waitKey(10) == 27: # ESC
+                            print("Saliendo durante conteo...")
+                            if out_video: out_video.release()
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            return
 
                 # GRABANDO FRAMES REALES
                 for frame_num in range(SEQUENCE_LENGTH):
@@ -160,18 +218,24 @@ def record_sign():
                         break
                     
                     frame = cv2.flip(frame, 1)
-
                     # 1. Detección
                     image, results = mediapipe_detection(frame, holistic)
 
                     # 2. Dibujar (Visual)
                     draw_styled_landmarks(image, results)
                     
-                    cv2.putText(image, '::: GRABANDO :::', (120,200), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255, 0), 4, cv2.LINE_AA)
-                    cv2.putText(image, f'Palabra: {sign_name} - {sequence + 1}/{NO_SEQUENCES}', (15,30), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+                    rec_indicator = "::: GRABANDO VIDEO :::" if record_video_mode else "::: GRABANDO :::"
+                    rec_color = (0, 0, 255) if record_video_mode else (0, 255, 0)
+
+                    cv2.putText(image, rec_indicator, (120,200), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, rec_color, 4, cv2.LINE_AA)
+                    cv2.putText(image, f'Palabra: {sign_name} - {sequence + 1}/{target_sequences}', (15,30), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
                     
+                    # ⚠️ GUARDAR VIDEO ANOTADO (Después de dibujar)
+                    if out_video:
+                        out_video.write(image)
+
                     cv2.imshow('Recolector LSC', image)
                     
                     # 4. Exportar Keypoints
@@ -184,9 +248,18 @@ def record_sign():
                     npy_full_path = os.path.join(seq_path, str(frame_num))
                     np.save(npy_full_path, keypoints)
 
-                    if cv2.waitKey(1) & 0xFF == ord('q'): # Salida de emergencia
-                        break
+                    if cv2.waitKey(1) & 0xFF == 27: # ESC (ASCII 27)
+                         print("Interrupción detectada (ESC). Borrando secuencia corrupta...")
+                         shutil.rmtree(seq_path, ignore_errors=True)
+                         if out_video: out_video.release()
+                         cap.release()
+                         cv2.destroyAllWindows()
+                         return
     
+    if out_video: 
+         out_video.release()
+         print("🎥 Video guardado correctamente.")
+
     cap.release()
     cv2.destroyAllWindows()
     print("¡Sesión completa! Todas las palabras grabadas.")

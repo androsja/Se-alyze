@@ -24,7 +24,7 @@ fun CameraPreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    val cameraExecutor = remember { Executors.newFixedThreadPool(2) }
     
     AndroidView(
         factory = { ctx ->
@@ -38,12 +38,15 @@ fun CameraPreview(
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
                     
-                    val preview = Preview.Builder().build().also {
+                    val preview = Preview.Builder()
+                        .setTargetResolution(android.util.Size(1280, 720))
+                        .build()
+                        .also {
                         it.setSurfaceProvider(this.surfaceProvider)
                     }
 
                     val imageAnalyzer = ImageAnalysis.Builder()
-                        .setTargetAspectRatio(AspectRatio.RATIO_16_9)
+                        .setTargetResolution(android.util.Size(1280, 720))
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                         .build()
