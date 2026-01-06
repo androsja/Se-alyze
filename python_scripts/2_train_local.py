@@ -10,7 +10,7 @@ import tensorflow as tf
 # CONFIGURACIÓN
 # ==========================================# Configuración
 DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dataset') 
-SEQUENCE_LENGTH = 35 # Ajustado a 35 frames
+SEQUENCE_LENGTH = 32 # Ajustado a 32 frames (aprox 1.05 seg a 30 FPS)
 EPOCHS = 120         
 BATCH_SIZE = 32
 

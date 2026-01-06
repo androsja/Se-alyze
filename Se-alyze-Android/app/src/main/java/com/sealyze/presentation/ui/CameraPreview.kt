@@ -20,7 +20,9 @@ import java.util.concurrent.Executors
 fun CameraPreview(
     onImageAnalyzed: (androidx.camera.core.ImageProxy) -> Unit,
     modifier: Modifier = Modifier,
-    cameraLens: Int = CameraSelector.LENS_FACING_BACK
+    cameraLens: Int = CameraSelector.LENS_FACING_BACK,
+    isWideAngle: Boolean = false,
+    onZoomStats: (Float, Float) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -61,12 +63,28 @@ fun CameraPreview(
 
                     try {
                         cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        val camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,
                             preview,
                             imageAnalyzer
                         )
+                        
+                        // Apply Zoom
+                        val zoomState = camera.cameraInfo.zoomState.value
+                        val minZoom = zoomState?.minZoomRatio ?: 1.0f
+                        val maxZoom = zoomState?.maxZoomRatio ?: 1.0f
+                        
+                        android.util.Log.i("SealyzeDebug", "📷 Zoom Stats: Min=$minZoom, Max=$maxZoom, Current=${zoomState?.zoomRatio}")
+                        
+                        // Report stats back to ViewModel
+                        onZoomStats(minZoom, maxZoom)
+                        
+                        val targetZoom = if (isWideAngle) minZoom else 1.0f
+                        
+                        camera.cameraControl.setZoomRatio(targetZoom)
+                        android.util.Log.i("SealyzeDebug", "📷 Setting Zoom to: $targetZoom (Requested Wide: $isWideAngle)")
+                        
                     } catch (exc: Exception) {
                         exc.printStackTrace()
                     }

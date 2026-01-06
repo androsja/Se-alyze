@@ -17,7 +17,7 @@ class TfliteDataSource @Inject constructor(
 
     private var interpreter: Interpreter? = null
     private val sequenceBuffer = ArrayDeque<SignFrame>()
-    private val SEQUENCE_LENGTH = 35 // Adjusted to 35 frames (approx 1.17s)
+    private val SEQUENCE_LENGTH = 32 // Adjusted to 32 frames (approx 1.05s at 30 FPS)
     private val FEATURE_SIZE = 126 // 21*3 (LH) + 21*3 (RH) - Simplified for Android
     private var labels: List<String> = emptyList()
 
@@ -126,7 +126,7 @@ class TfliteDataSource @Inject constructor(
         // Reduced from 8 to 5 to make detection feel "snappier".
         val validFrames = sequenceBuffer.count { it.leftHand != null || it.rightHand != null }
         if (validFrames < 5) {
-            android.util.Log.d("SealyzeDebug", "Skipping inference: Not enough hands detected ($validFrames/30)")
+            //android.util.Log.d("SealyzeDebug", "Skipping inference: Not enough hands detected ($validFrames/30)")
             return TranslationResult("", 0f, null, "No hands")
         }
 

@@ -1,3 +1,4 @@
-_none,60
-buenos_dias,90
-agua
+_none,100
+buenos_dias,100
+hola,100
+agua,30

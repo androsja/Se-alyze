@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import javax.inject.Inject
 
 data class CameraUiState(
@@ -27,7 +28,10 @@ data class CameraUiState(
     val autoGenProgress: Float = 0f, // 0.0f to 1.0f
     val isProcessing: Boolean = false,
     val sentenceDelay: Long = 5000L, // Default 5 seconds
-    val lensFacing: Int = androidx.camera.core.CameraSelector.LENS_FACING_BACK
+    val lensFacing: Int = androidx.camera.core.CameraSelector.LENS_FACING_BACK,
+    val isWideAngle: Boolean = false, // Zoom state
+    val minZoom: Float = 1.0f,
+    val maxZoom: Float = 1.0f
 )
 
 @HiltViewModel
@@ -42,6 +46,7 @@ class CameraViewModel @Inject constructor(
     private var sentenceDebounceJob: kotlinx.coroutines.Job? = null
     private var lastDetectionTime: Long = 0L
     private var ignoredWord: String = ""
+    private var currentDebounceWord: String? = null // FIXED: Defined at class level
 
     private val _uiState = MutableStateFlow(CameraUiState(
         sentenceDelay = settingsRepository.getSentenceDelay(),
@@ -63,7 +68,11 @@ class CameraViewModel @Inject constructor(
                 _uiState.update { it.copy(smartSentenceBuffer = buffer) }
                 // If buffer becomes empty (e.g. after generation), reset progress
                 if (buffer.isEmpty()) {
-                    sentenceDebounceJob?.cancel()
+                    // CRITICAL FIX: Do NOT cancel the job here.
+                    // If the buffer empties because Groq just finished, we still need the job to survive
+                    // long enough to 'await()' the result and speak it.
+                    // sentenceDebounceJob?.cancel() <-- REMOVED
+                    
                     _uiState.update { it.copy(autoGenProgress = 0f) }
                 }
             }
@@ -90,13 +99,15 @@ class CameraViewModel @Inject constructor(
                 // Cancel previous clear timer
                 clearSentenceJob?.cancel()
                 
-                // Optional: Speak the full sentence
+                // **LATENCY FIX**: We already spoke the raw words immediately when timer expired.
+                // The LLM-generated sentence is just for displaying a better UI version.
+                // So we DON'T speak it again to avoid double-speaking.
                 if (sentence.isNotEmpty()) {
-                    android.util.Log.i("SealyzeDetection", "🗣️ HABLANDO: '$sentence'")
-                    ttsManager.speak(sentence)
+                    android.util.Log.i("SealyzeDetection", "📝 LLM Sentence Ready (UI only): '$sentence'")
+                    // Removed: ttsManager.speak(sentence) - Already spoke raw words
                     
                     // CLEAR EVERYTHING AFTER A SHORT DELAY (e.g. 2s)
-                    // This gives the user time to hear/see the sentence, then resets completely
+                    // This gives the user time to see the improved sentence, then resets completely
                     clearSentenceJob = launch {
                         kotlinx.coroutines.delay(2000) 
                         _uiState.update { it.copy(
@@ -129,18 +140,18 @@ class CameraViewModel @Inject constructor(
 
                     val previousWord = _uiState.value.currentTranslation
                     
-                    android.util.Log.d("SealyzeDebug", "ViewModel: Received prediction: ${result.word} (${result.confidence})")
+                    //android.util.Log.d("SealyzeDebug", "ViewModel: Received prediction: ${result.word} (${result.confidence})")
                     
                     // STICKY TRANSLATION LOGIC WITH TIMEOUT
                     val currentTime = System.currentTimeMillis()
                     
-                    // Update validation time if we have a strong detection
-                    if (!result.word.startsWith("_") && result.word.isNotEmpty() && result.confidence > 0.55f) {
+                    // Update validation time if we have a strong detection (Increased threshold)
+                    if (!result.word.startsWith("_") && result.word.isNotEmpty() && result.confidence > 0.75f) {
                          lastDetectionTime = currentTime
                     }
 
-                    // Decide what to show (Show >= 0.50)
-                    val displayWord = if (!result.word.startsWith("_") && result.word.isNotEmpty() && result.confidence > 0.50f) {
+                    // Decide what to show (Show >= 0.70)
+                    val displayWord = if (!result.word.startsWith("_") && result.word.isNotEmpty() && result.confidence > 0.70f) {
                         result.word 
                     } else {
                         // If no new word, keep previous... UNLESS it's stale (1.5s timeout)
@@ -157,15 +168,15 @@ class CameraViewModel @Inject constructor(
                             confidence = result.confidence,
                             debugInfo = result.probabilityDebug,
                             // Flash "Processing" if we have a non-empty result (even if low confidence)
-                            isProcessing = result.confidence > 0.3f 
+                            isProcessing = result.confidence > 0.4f 
                         ) 
                     }
                     
                     // TTS Logic uses the NEW word detection, not just the display state
                     val newWordDetected = !result.word.startsWith("_") && result.word.isNotEmpty() && (result.word != previousWord)
                     
-                    // LOWERED THRESHOLD: 0.50f (Matches display)
-                    if (newWordDetected && result.confidence > 0.50f) {
+                    // HIGHER THRESHOLD FOR TTS/ADD: 0.75f (Reduces false positives)
+                    if (newWordDetected && result.confidence > 0.750f) {
                         // LOG FOR USER: This is the definitive "Detection Event"
                         android.util.Log.i("SealyzeDetection", "🎯 DETECTADO: '${result.word}'")
                         
@@ -176,36 +187,93 @@ class CameraViewModel @Inject constructor(
                         // ttsManager.speak(result.word) <-- REMOVED
                         
                         // 2. Start/Reset 3s Timer (Debounce)
-                        sentenceDebounceJob?.cancel()
+                        // Only cancel if the detected word is DIFFERENT from the one currently debouncing
+                        if (currentDebounceWord == null || result.word != currentDebounceWord) {
+                            sentenceDebounceJob?.cancel()
+                            currentDebounceWord = null // Reset if cancelled due to different word
+                        }
                         
                         // Cancel the "Hide" timer if it was running, to keep sticky text visible while buffering
                         clearSentenceJob?.cancel()
 
-                        sentenceDebounceJob = viewModelScope.launch {
-                            android.util.Log.d("SealyzeDebug", "⏳ Waiting ${_uiState.value.sentenceDelay}ms for more signs...")
+                        // START NEW TIMER ONLY IF NEEDED
+                        // 1. If word changed, we already cancelled above -> currentDebounceWord is null -> Start.
+                        // 2. If word is same, BUT job is dead/not active -> Start (Recovery).
+                        // 3. If word is same AND job is running -> Do nothing (Let it run).
+                        
+                        val isTimerActive = sentenceDebounceJob?.isActive == true
+                        
+                        if (currentDebounceWord == null || !isTimerActive) {
+                            // Set the word that started this timer
+                            currentDebounceWord = result.word
                             
-                            // Dynamic timeout based on user selection
-                            val totalDuration = _uiState.value.sentenceDelay
-                            val step = 100L
-                            for (elapsed in 0L..totalDuration step step) {
-                                if (!isActive) break
-                                val progress = elapsed.toFloat() / totalDuration
-                                _uiState.update { it.copy(autoGenProgress = progress) }
-                                kotlinx.coroutines.delay(step)
+                            // Force cancel just in case it's a zombie job reference
+                            sentenceDebounceJob?.cancel()
+    
+                            sentenceDebounceJob = viewModelScope.launch {
+                                val totalDuration = _uiState.value.sentenceDelay
+                                val halfDuration = totalDuration / 2
+                                val step = 100L
+                                
+                                android.util.Log.d("SealyzeDebug", "⏳ Starting speculative timer: ${totalDuration}ms (LLM launch at ${halfDuration}ms)")
+    
+                                // 1. FIRST HALF WAIT (Progress 0% -> 50%)
+                                for (elapsed in 0L..halfDuration step step) {
+                                    if (!isActive) return@launch
+                                    val progress = elapsed.toFloat() / totalDuration
+                                    _uiState.update { it.copy(autoGenProgress = progress) }
+                                    kotlinx.coroutines.delay(step)
+                                }
+                                
+                                // 2. SPECULATIVE EXECUTION: Launch Groq in background
+                                // This is a child coroutine; if parent (debounce job) is cancelled, this dies too.
+                                android.util.Log.d("SealyzeDebug", "🚀 Speculative: Launching Groq request now...")
+                                val groqDeferred = async { 
+                                    smartSentenceRepository.generateSentence() 
+                                }
+                                
+                                // 3. SECOND HALF WAIT (Progress 50% -> 100%)
+                                android.util.Log.d("SealyzeDebug", "⏳ Speculative: Starting second half wait...")
+                                for (elapsed in halfDuration..totalDuration step step) {
+                                    if (!isActive) {
+                                        android.util.Log.d("SealyzeDebug", "🛑 Speculative: Job CANCELLED during second half wait")
+                                        return@launch
+                                    }
+                                    val progress = elapsed.toFloat() / totalDuration
+                                    _uiState.update { it.copy(autoGenProgress = progress) }
+                                    kotlinx.coroutines.delay(step)
+                                }
+                                
+                                // 4. TIMER FINISHED
+                                android.util.Log.d("SealyzeDebug", "🏁 Speculative: Timer completed. Finalizing...")
+                                _uiState.update { it.copy(autoGenProgress = 1f) }
+                                
+                                // 5. GET RESULT
+                                android.util.Log.d("SealyzeDebug", "⏳ Speculative: Awaiting Groq result...")
+                                try {
+                                    val finalSentence = groqDeferred.await()
+                                    android.util.Log.d("SealyzeDebug", "✅ Speculative: Groq returned: '$finalSentence'")
+                                    
+                                    // 6. SPEAK
+                                    if (finalSentence.isNotEmpty()) {
+                                        android.util.Log.i("SealyzeDetection", "🗣️ Speaking Speculative Result: '$finalSentence'")
+                                        ttsManager.speak(finalSentence)
+                                    } else {
+                                        android.util.Log.w("SealyzeDebug", "⚠️ Speculative warning: Groq result empty")
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SealyzeDebug", "❌ Speculative Error during await/speak: ${e.message}", e)
+                                }
+                                
+                                // 7. Cleanup
+                                currentDebounceWord = null
+                                // Note: We don't set sentenceDebounceJob = null here because it's tricky 
+                                // inside the coroutine itself, but currentDebounceWord = null is the key signal.
+                                _uiState.update { it.copy(autoGenProgress = 0f) }
                             }
-                            
-                            // 3. Timer Finished -> GENERATE, SPEAK & CLEAR
-                            _uiState.update { it.copy(autoGenProgress = 1f) }
-                            android.util.Log.d("SealyzeDebug", "⏳ 3s Finished! Generating Sentence...")
-                            smartSentenceRepository.generateSentence()
-                            
-                            // NOTE: The 'generatedSentence.collect' block (lines 60-80) handles the speaking and 
-                            // final clearing (after 5s) once the repository emits the sentence.
-                            
-                             _uiState.update { it.copy(autoGenProgress = 0f) }
                         }
                     } else {
-                        android.util.Log.d("SealyzeDebug", "❌ TTS: NOT speaking '$displayWord' - Failed checks")
+                       // android.util.Log.d("SealyzeDebug", "❌ TTS: NOT speaking '$displayWord' - Failed checks")
                     }
                 }
         }
@@ -238,5 +306,15 @@ class CameraViewModel @Inject constructor(
     fun setLensFacing(lens: Int) {
         settingsRepository.saveLensFacing(lens)
         _uiState.update { it.copy(lensFacing = lens) }
+        // Reset wide angle when switching lenses (optional safe default)
+        _uiState.update { it.copy(isWideAngle = false) }
+    }
+    
+    fun toggleWideAngle() {
+        _uiState.update { it.copy(isWideAngle = !it.isWideAngle) }
+    }
+
+    fun updateZoomStats(min: Float, max: Float) {
+        _uiState.update { it.copy(minZoom = min, maxZoom = max) }
     }
 }

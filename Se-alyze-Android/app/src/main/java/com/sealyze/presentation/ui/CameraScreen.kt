@@ -84,8 +84,12 @@ fun CameraScreen(
             androidx.compose.runtime.key(uiState.lensFacing) {
                 CameraPreview(
                     cameraLens = uiState.lensFacing,
+                    isWideAngle = uiState.isWideAngle,
                     onImageAnalyzed = { proxy -> 
                         viewModel.processImageProxy(proxy)
+                    },
+                    onZoomStats = { min, max ->
+                        viewModel.updateZoomStats(min, max)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -174,7 +178,7 @@ fun CameraScreen(
                         .padding(start = 24.dp)
                 )
 
-                // Glassy Switch Button
+                // Glassy Switch Button (Camera Lens)
                 androidx.compose.material3.IconButton(
                     onClick = { 
                         val newLens = if (uiState.lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_BACK) {
@@ -200,6 +204,34 @@ fun CameraScreen(
                         contentDescription = "Cambiar Cámara",
                         tint = Color.White
                     )
+                }
+
+                // WIDE ANGLE BUTTON (Only for Front Camera AND if supported)
+                // Check if minZoom < 1.0f (allows wide angle)
+                if (uiState.lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT && uiState.minZoom < 1.0f) {
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(16.dp))
+                    
+                    val zoomIconText = if (uiState.isWideAngle) "0.5x" else "1x"
+                    
+                    androidx.compose.material3.IconButton(
+                        onClick = { viewModel.toggleWideAngle() },
+                        modifier = Modifier
+                            .background(
+                                color = if (uiState.isWideAngle) Color.Cyan.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.2f), 
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                            .border(
+                                width = 1.dp, 
+                                color = if (uiState.isWideAngle) Color.Cyan else Color.White.copy(alpha = 0.3f), 
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                    ) {
+                        Text(
+                            text = zoomIconText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
@@ -243,7 +275,30 @@ fun CameraScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // LEFT: Main Content (Buffer + Result)
+                // LEFT ACTION: Clear Button (Moved here for better separation)
+                if (uiState.smartSentenceBuffer.isNotEmpty() || uiState.smartSentence.isNotEmpty()) {
+                    androidx.compose.material3.IconButton(
+                        onClick = { viewModel.onClearSentence() },
+                        modifier = Modifier
+                            .padding(end = 12.dp) // Add spacing before text
+                            .height(44.dp) // Slightly larger touch target
+                            .width(44.dp)
+                            .background(
+                                color = Color.Red.copy(alpha = 0.2f), // Red tint for destructive action
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                            .border(1.dp, Color.Red.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Filled.DeleteSweep,
+                            contentDescription = "Borrar",
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.height(24.dp).width(24.dp)
+                        )
+                    }
+                }
+
+                // CENTER: Main Content (Buffer + Result)
                 Column(
                     modifier = Modifier.weight(1f).padding(end = 8.dp),
                     verticalArrangement = Arrangement.Center
@@ -331,8 +386,8 @@ fun CameraScreen(
                     }
                 }
 
-                // RIGHT: Actions (Clear / Status Icon)
-                // Layout: [Waves?] [Timer] [Trash]
+                // RIGHT: Actions (Waves + Timer) 
+                // Deleted Clear Button from here
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     
@@ -367,7 +422,15 @@ fun CameraScreen(
                             expanded = showTimerMenu,
                             onDismissRequest = { showTimerMenu = false }
                         ) {
-                            listOf(5000L to "5s", 8000L to "8s", 10000L to "10s").forEach { (delay, label) ->
+                            // UDPATED TIMER OPTIONS: 1s to 6s
+                            listOf(
+                                1000L to "1s", 
+                                2000L to "2s", 
+                                3000L to "3s", 
+                                4000L to "4s", 
+                                5000L to "5s", 
+                                6000L to "6s"
+                            ).forEach { (delay, label) ->
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(label + if (uiState.sentenceDelay == delay) " ✓" else "") },
                                     onClick = { 
@@ -379,28 +442,9 @@ fun CameraScreen(
                         }
                     }
 
-                    // --- CLEAR BUTTON (Small) ---
-                    if (uiState.smartSentenceBuffer.isNotEmpty() || uiState.smartSentence.isNotEmpty()) {
-                        androidx.compose.material3.IconButton(
-                            onClick = { viewModel.onClearSentence() },
-                            modifier = Modifier
-                                .height(36.dp) // COMPACT SIZE
-                                .width(36.dp)
-                                .background(
-                                    color = Color.White.copy(alpha = 0.15f), 
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                )
-                                .border(1.dp, Color.White.copy(alpha = 0.1f), androidx.compose.foundation.shape.CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Filled.DeleteSweep,
-                                contentDescription = "Borrar",
-                                tint = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.height(20.dp).width(20.dp) // Smaller Icon
-                            )
-                        }
-                    } else if (!handsVisible) {
-                        // Idle Indicator (Static dot when no hands)
+                    // --- CLEAR BUTTON REMOVED FROM HERE ---
+                    if (!handsVisible && (uiState.smartSentenceBuffer.isEmpty() && uiState.smartSentence.isEmpty())) {
+                        // Idle Indicator (Static dot when no hands AND nothing to clear)
                         Icon(
                             imageVector = androidx.compose.material.icons.Icons.Filled.FiberManualRecord,
                             contentDescription = "Idle",

@@ -36,31 +36,19 @@ class SmartSentenceRepository @Inject constructor(
         _generatedSentence.value = ""
     }
 
-    suspend fun generateSentence() {
+    suspend fun generateSentence(): String {
         val words = _wordBuffer.value
         if (words.isNotEmpty()) {
             val prompt = words.joinToString(", ")
             
-            // STRATEGY: Groq (Recommended) -> Gemini -> DeepSeek -> Raw
+            // STRATEGY: Groq ONLY (Fastest & Free)
             
-            // 1. Try Groq (Fastest)
+            // 1. Try Groq
             var result = groqDataSource.generateSentence(prompt)
             
-            // 2. Fallback to Gemini
+            // 2. Final Fallback: Raw Concatenation if Groq fails
             if (result == null) {
-                android.util.Log.w("SealyzeDetection", "⚠️ Repository: Groq failed (or no key), trying Gemini...")
-                result = geminiDataSource.generateSentence(words)
-            }
-            
-            // 3. Fallback to DeepSeek
-            if (result == null) {
-                android.util.Log.w("SealyzeDetection", "⚠️ Repository: Gemini failed, trying DeepSeek...")
-                result = deepSeekDataSource.generateSentence(prompt)
-            }
-            
-            // 4. Final Fallback: Raw Concatenation
-            if (result == null) {
-                android.util.Log.e("SealyzeDetection", "❌ Repository: All LLMs failed. Using raw string.")
+                android.util.Log.e("SealyzeDetection", "❌ Repository: Groq failed. Using raw string.")
                 result = words.joinToString(" ")
             }
             
@@ -68,6 +56,9 @@ class SmartSentenceRepository @Inject constructor(
             
             // Clear buffer after successful generation so next sentence is fresh
             _wordBuffer.value = emptyList()
+            
+            return result
         }
+        return ""
     }
 }

@@ -30,7 +30,7 @@ except FileNotFoundError:
 print(f"📋 Lista de trabajo cargada: {SIGN_LIST}") 
 DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'dataset') # Ruta absoluta: Se-alyze/dataset
 NO_SEQUENCES = 30   # Videos por seña
-SEQUENCE_LENGTH = 35  # AJUSTADO: 35 frames (aprox 1.17 seg) - Balance perfecto
+SEQUENCE_LENGTH = 32  # AJUSTADO: 32 frames (aprox 1.05 seg a 30 FPS)
 MIN_LENGTH = 15      # Mínimo de frames para que sea válidaara mayor velocidad)
 
 # ==========================================
@@ -213,6 +213,7 @@ def record_sign():
                             return
                             
                 print(f"🎬 Grabando secuencia {sequence + 1}/{target_sequences} para '{sign_name}'...")
+                os.system("afplay /System/Library/Sounds/Ping.aiff &") # Sonido de inicio
 
                 # GRABANDO FRAMES REALES
                 for frame_num in range(SEQUENCE_LENGTH):

@@ -29,7 +29,12 @@ class GroqDataSource @Inject constructor() {
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "system")
-                            put("content", "Eres un traductor estricto. Responde solo con la frase corregida en español.")
+                            put("content", "Eres un intérprete experto de lengua de señas en tiempo real. Tu trabajo es convertir una secuencia de palabras clave detectadas (que pueden tener errores o repeticiones) en una frase coherente y natural en español.\n" +
+                                    "REGLAS:\n" +
+                                    "1. Elimina repeticiones innecesarias (ej: 'hola hola buenos dias' -> 'Hola, buenos días').\n" +
+                                    "2. Agrega conectores y artículos para darle sentido gramatical.\n" +
+                                    "3. Si palabras sueltas no tienen sentido en el contexto, prioriza la coherencia.\n" +
+                                    "4. Responde ÚNICAMENTE con la frase final corregida. Nada más.")
                         })
                         put(JSONObject().apply {
                             put("role", "user")
